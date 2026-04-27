@@ -7,7 +7,7 @@ import {
   Zap, Hash, FileText, Sun, Moon, ExternalLink,
   Clock, BarChart2, Layers, RefreshCw,
 } from "lucide-react";
-import { generateContent, GeneratedContent } from "@/lib/contentGenerator";
+import { GeneratedContent } from "@/lib/contentGenerator";
 
 type Platform = "linkedin" | "twitter" | "instagram" | "image";
 type Theme = "dark" | "light";
@@ -108,7 +108,7 @@ function ContentCard({
   const cfg = platformConfig[platform];
   const Icon = cfg.icon;
   const iconColor = platformIconVar[platform];
-  const charCount = content.length;
+  const charCount = content?.length || 0;
   const isOver = cfg.charLimit ? charCount > cfg.charLimit : false;
 
   const handleCopy = async () => {
@@ -363,26 +363,51 @@ export default function Home() {
 
   const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
 
-  const handleGenerate = useCallback(() => {
-    if (!topic.trim()) { setError("Please enter a topic to get started."); return; }
-    if (topic.trim().length < 3) { setError("Topic must be at least 3 characters."); return; }
-    setError("");
-    setIsLoading(true);
-    setHasGenerated(true);
-    setContent(null);
+  const handleGenerate = useCallback(async () => {
+  if (!topic.trim()) {
+    setError("Please enter a topic to get started.");
+    return;
+  }
 
-    setTimeout(() => {
-      try {
-        const result = generateContent({ topic: topic.trim(), platform, tone, userProfile });
-        setContent(result);
-      } catch {
-        setError("Generation failed. Please try again.");
-        setHasGenerated(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }, 850);
-  }, [topic, platform, tone, userProfile]);
+  if (topic.trim().length < 3) {
+    setError("Topic must be at least 3 characters.");
+    return;
+  }
+
+  setError("");
+  setIsLoading(true);
+  setHasGenerated(true);
+  setContent(null);
+
+  try {
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        topic: topic.trim(),
+        platform,
+        tone,
+        userProfile,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to generate");
+    }
+
+    setContent(data.content);
+  } catch (err) {
+    console.error(err);
+    setError("Generation failed. Please try again.");
+    setHasGenerated(false);
+  } finally {
+    setIsLoading(false);
+  }
+}, [topic, platform, tone, userProfile]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate();
@@ -609,7 +634,7 @@ export default function Home() {
             </button>
 
             <p className="text-center text-xs mt-3" style={{ color: "var(--text-muted)" }}>
-              Instant results — no API key required
+              Powered by AI — API key required
             </p>
           </div>
 

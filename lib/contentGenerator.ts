@@ -103,11 +103,104 @@ function imagePrompt(input: GenerateInput): string {
 
 // ─── Main export — runs entirely in the browser ───────────────────────────────
 
-export function generateContent(input: GenerateInput): GeneratedContent {
-  return {
-    linkedin:    linkedin(input),
-    twitter:     twitter(input),
-    instagram:   instagram(input),
-    imagePrompt: imagePrompt(input),
-  };
+// export function generateContent(input: GenerateInput): GeneratedContent {
+//   return {
+//     linkedin:    linkedin(input),
+//     twitter:     twitter(input),
+//     instagram:   instagram(input),
+//     imagePrompt: imagePrompt(input),
+//   };
+// }
+
+
+export async function generateContent(input: GenerateInput): Promise<GeneratedContent> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  // Fallback if no API key
+  if (!apiKey) {
+    return {
+      linkedin: linkedin(input),
+      twitter: twitter(input),
+      instagram: instagram(input),
+      imagePrompt: imagePrompt(input),
+    };
+  }
+
+  try {
+    const prompt = `
+Generate social media content for the following:
+
+Topic: ${input.topic}
+Tone: ${input.tone}
+
+Give output in this EXACT format:
+
+LinkedIn:
+Write a professional LinkedIn post.
+
+Twitter:
+Write a short and catchy tweet (max 280 characters).
+
+Instagram:
+Write an engaging Instagram caption with emojis and hashtags.
+
+Image Prompt:
+Describe an image for this topic.
+
+IMPORTANT:
+- Keep each section clearly separated
+- Do NOT mix sections
+`;
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "AI Content Generator"
+      },
+      body: JSON.stringify({
+        model: "mistralai/mixtral-8x7b-instruct",
+        messages: [
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    console.log("FULL API RESPONSE:", data);
+
+    const text = data.choices?.[0]?.message?.content || "";
+
+    // 🧠 Split response into sections
+    function extractSection(text: string, label: string) {
+  const regex = new RegExp(`${label}:([\\s\\S]*?)(?=\\n\\w+:|$)`, "i");
+  const match = text.match(regex);
+  return match ? match[1].trim() : "";
+}
+
+const linkedinText = extractSection(text, "LinkedIn");
+const twitterText = extractSection(text, "Twitter");
+const instagramText = extractSection(text, "Instagram");
+const imageText = extractSection(text, "Image Prompt");
+
+return {
+  linkedin: linkedinText || "No LinkedIn content generated",
+  twitter: twitterText || "No Twitter content generated",
+  instagram: instagramText || "No Instagram content generated",
+  imagePrompt: imageText || "No image prompt generated",
+};
+
+  } catch (error) {
+    console.error("AI Error:", error);
+
+    // fallback
+    return {
+      linkedin: linkedin(input),
+      twitter: twitter(input),
+      instagram: instagram(input),
+      imagePrompt: imagePrompt(input),
+    };
+  }
 }
